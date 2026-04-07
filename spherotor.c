@@ -1,0 +1,496 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define MAX_ATOMS 2000
+#define MAX_LABEL 8
+#define MAX_PATH 1024
+#define MAX_FRAMES 100000
+#define MAX_COORDS 1000000
+
+typedef struct {
+    char el[MAX_LABEL];
+    double x, y, z;
+} Atom;
+
+typedef struct {
+    double x, y, z;
+} Vec3;
+
+/* Comprehensive periodic table atomic masses */
+static double element_mass(const char *el) {
+    /* Period 1 */
+    if (strcmp(el, "H") == 0) return 1.00794;
+    if (strcmp(el, "He") == 0) return 4.00260;
+    
+    /* Period 2 */
+    if (strcmp(el, "Li") == 0) return 6.94100;
+    if (strcmp(el, "Be") == 0) return 9.01218;
+    if (strcmp(el, "B") == 0) return 10.81100;
+    if (strcmp(el, "C") == 0) return 12.01070;
+    if (strcmp(el, "N") == 0) return 14.00670;
+    if (strcmp(el, "O") == 0) return 15.99900;
+    if (strcmp(el, "F") == 0) return 18.99840;
+    if (strcmp(el, "Ne") == 0) return 20.17970;
+    
+    /* Period 3 */
+    if (strcmp(el, "Na") == 0) return 22.98977;
+    if (strcmp(el, "Mg") == 0) return 24.30500;
+    if (strcmp(el, "Al") == 0) return 26.98154;
+    if (strcmp(el, "Si") == 0) return 28.08550;
+    if (strcmp(el, "P") == 0) return 30.97376;
+    if (strcmp(el, "S") == 0) return 32.06500;
+    if (strcmp(el, "Cl") == 0) return 35.45300;
+    if (strcmp(el, "Ar") == 0) return 39.94800;
+    
+    /* Period 4 */
+    if (strcmp(el, "K") == 0) return 39.09830;
+    if (strcmp(el, "Ca") == 0) return 40.07800;
+    if (strcmp(el, "Sc") == 0) return 44.95591;
+    if (strcmp(el, "Ti") == 0) return 47.86700;
+    if (strcmp(el, "V") == 0) return 50.94150;
+    if (strcmp(el, "Cr") == 0) return 51.99610;
+    if (strcmp(el, "Mn") == 0) return 54.93805;
+    if (strcmp(el, "Fe") == 0) return 55.84500;
+    if (strcmp(el, "Co") == 0) return 58.93320;
+    if (strcmp(el, "Ni") == 0) return 58.69340;
+    if (strcmp(el, "Cu") == 0) return 63.54600;
+    if (strcmp(el, "Zn") == 0) return 65.39000;
+    if (strcmp(el, "Ga") == 0) return 69.72300;
+    if (strcmp(el, "Ge") == 0) return 72.64000;
+    if (strcmp(el, "As") == 0) return 74.92160;
+    if (strcmp(el, "Se") == 0) return 78.96000;
+    if (strcmp(el, "Br") == 0) return 79.90400;
+    if (strcmp(el, "Kr") == 0) return 83.79800;
+    
+    /* Period 5 */
+    if (strcmp(el, "Rb") == 0) return 85.46780;
+    if (strcmp(el, "Sr") == 0) return 87.62000;
+    if (strcmp(el, "Y") == 0) return 88.90585;
+    if (strcmp(el, "Zr") == 0) return 91.22400;
+    if (strcmp(el, "Nb") == 0) return 92.90638;
+    if (strcmp(el, "Mo") == 0) return 95.94000;
+    if (strcmp(el, "Tc") == 0) return 98.00000;
+    if (strcmp(el, "Ru") == 0) return 101.07000;
+    if (strcmp(el, "Rh") == 0) return 102.90550;
+    if (strcmp(el, "Pd") == 0) return 106.42000;
+    if (strcmp(el, "Ag") == 0) return 107.86800;
+    if (strcmp(el, "Cd") == 0) return 112.41100;
+    if (strcmp(el, "In") == 0) return 114.81800;
+    if (strcmp(el, "Sn") == 0) return 118.71000;
+    if (strcmp(el, "Sb") == 0) return 121.75700;
+    if (strcmp(el, "Te") == 0) return 127.60000;
+    if (strcmp(el, "I") == 0) return 126.90447;
+    if (strcmp(el, "Xe") == 0) return 131.29300;
+    
+    /* Period 6 */
+    if (strcmp(el, "Cs") == 0) return 132.90545;
+    if (strcmp(el, "Ba") == 0) return 137.32700;
+    if (strcmp(el, "La") == 0) return 138.90547;
+    if (strcmp(el, "Ce") == 0) return 140.11600;
+    if (strcmp(el, "Pr") == 0) return 140.90765;
+    if (strcmp(el, "Nd") == 0) return 144.24200;
+    if (strcmp(el, "Pm") == 0) return 145.00000;
+    if (strcmp(el, "Sm") == 0) return 150.36000;
+    if (strcmp(el, "Eu") == 0) return 151.96400;
+    if (strcmp(el, "Gd") == 0) return 157.25000;
+    if (strcmp(el, "Tb") == 0) return 158.92534;
+    if (strcmp(el, "Dy") == 0) return 162.50000;
+    if (strcmp(el, "Ho") == 0) return 164.93032;
+    if (strcmp(el, "Er") == 0) return 167.25900;
+    if (strcmp(el, "Tm") == 0) return 168.93421;
+    if (strcmp(el, "Yb") == 0) return 173.04000;
+    if (strcmp(el, "Lu") == 0) return 174.96700;
+    if (strcmp(el, "Hf") == 0) return 178.49200;
+    if (strcmp(el, "Ta") == 0) return 180.94788;
+    if (strcmp(el, "W") == 0) return 183.84000;
+    if (strcmp(el, "Re") == 0) return 186.20700;
+    if (strcmp(el, "Os") == 0) return 190.23000;
+    if (strcmp(el, "Ir") == 0) return 192.21700;
+    if (strcmp(el, "Pt") == 0) return 195.08400;
+    if (strcmp(el, "Au") == 0) return 196.96657;
+    if (strcmp(el, "Hg") == 0) return 200.59200;
+    if (strcmp(el, "Tl") == 0) return 204.38300;
+    if (strcmp(el, "Pb") == 0) return 207.20000;
+    if (strcmp(el, "Bi") == 0) return 208.98038;
+    if (strcmp(el, "Po") == 0) return 209.00000;
+    if (strcmp(el, "At") == 0) return 210.00000;
+    if (strcmp(el, "Rn") == 0) return 222.00000;
+    
+    /* Period 7 */
+    if (strcmp(el, "Fr") == 0) return 223.00000;
+    if (strcmp(el, "Ra") == 0) return 226.00000;
+    if (strcmp(el, "Ac") == 0) return 227.00000;
+    if (strcmp(el, "Th") == 0) return 232.03806;
+    if (strcmp(el, "Pa") == 0) return 231.03588;
+    if (strcmp(el, "U") == 0) return 238.02891;
+    if (strcmp(el, "Np") == 0) return 237.00000;
+    if (strcmp(el, "Pu") == 0) return 244.00000;
+    if (strcmp(el, "Am") == 0) return 243.00000;
+    if (strcmp(el, "Cm") == 0) return 247.00000;
+    if (strcmp(el, "Bk") == 0) return 247.00000;
+    if (strcmp(el, "Cf") == 0) return 251.00000;
+    if (strcmp(el, "Es") == 0) return 252.00000;
+    if (strcmp(el, "Fm") == 0) return 257.00000;
+    
+    /* Default fallback */
+    return 12.0;
+}
+
+static Vec3 v_add(Vec3 a, Vec3 b) { Vec3 c = {a.x + b.x, a.y + b.y, a.z + b.z}; return c; }
+static Vec3 v_sub(Vec3 a, Vec3 b) { Vec3 c = {a.x - b.x, a.y - b.y, a.z - b.z}; return c; }
+static Vec3 v_scale(Vec3 a, double s) { Vec3 c = {a.x * s, a.y * s, a.z * s}; return c; }
+static double v_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+static Vec3 v_cross(Vec3 a, Vec3 b) {
+    Vec3 c = {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+    return c;
+}
+static double v_norm(Vec3 a) { return sqrt(v_dot(a, a)); }
+
+static Vec3 v_normalize(Vec3 a) {
+    double n = v_norm(a);
+    if (n < 1e-15) {
+        Vec3 z = {0.0, 0.0, 0.0};
+        return z;
+    }
+    return v_scale(a, 1.0 / n);
+}
+
+static Vec3 rotate_about_axis(Vec3 v, Vec3 axis_unit, double angle_rad) {
+    double c = cos(angle_rad);
+    double s = sin(angle_rad);
+    Vec3 term1 = v_scale(v, c);
+    Vec3 term2 = v_scale(v_cross(axis_unit, v), s);
+    Vec3 term3 = v_scale(axis_unit, v_dot(axis_unit, v) * (1.0 - c));
+    return v_add(v_add(term1, term2), term3);
+}
+
+static Vec3 align_vector_to_target(Vec3 v, Vec3 from_unit, Vec3 to_unit) {
+    double c = v_dot(from_unit, to_unit);
+    if (c > 1.0) c = 1.0;
+    if (c < -1.0) c = -1.0;
+
+    if (c > 1.0 - 1e-14) return v;
+
+    if (c < -1.0 + 1e-14) {
+        Vec3 trial = {1.0, 0.0, 0.0};
+        if (fabs(v_dot(from_unit, trial)) > 0.9) {
+            trial.x = 0.0;
+            trial.y = 1.0;
+            trial.z = 0.0;
+        }
+        Vec3 axis = v_normalize(v_cross(from_unit, trial));
+        return rotate_about_axis(v, axis, M_PI);
+    }
+
+    Vec3 axis = v_normalize(v_cross(from_unit, to_unit));
+    double angle = acos(c);
+    return rotate_about_axis(v, axis, angle);
+}
+
+static int read_xyz(const char *path, Atom *atoms, int *n_atoms, char *title, size_t title_sz) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) return 0;
+
+    int n = 0;
+    if (fscanf(fp, "%d", &n) != 1 || n < 1 || n > MAX_ATOMS) {
+        fclose(fp);
+        return 0;
+    }
+
+    int ch;
+    while ((ch = fgetc(fp)) != '\n' && ch != EOF) {}
+
+    if (!fgets(title, (int)title_sz, fp)) {
+        fclose(fp);
+        return 0;
+    }
+
+    for (int i = 0; i < n; i++) {
+        if (fscanf(fp, "%7s %lf %lf %lf", atoms[i].el, &atoms[i].x, &atoms[i].y, &atoms[i].z) != 4) {
+            fclose(fp);
+            return 0;
+        }
+    }
+
+    fclose(fp);
+    *n_atoms = n;
+    return 1;
+}
+
+static void write_xyz_frame_single(FILE *fp, const Atom *atoms, int n_atoms, int frame_num) {
+    fprintf(fp, "%d\n", n_atoms);
+    fprintf(fp, "Frame %d\n", frame_num);
+    for (int i = 0; i < n_atoms; i++) {
+        fprintf(fp, "%-2s % .9f % .9f % .9f\n", atoms[i].el, atoms[i].x, atoms[i].y, atoms[i].z);
+    }
+}
+
+static Vec3 fibonacci_direction(int i, int n) {
+    double idx = (double)i + 0.5;
+    double phi = acos(1.0 - 2.0 * idx / (double)n);
+    double theta = M_PI * (1.0 + sqrt(5.0)) * idx;
+    Vec3 u = {cos(theta) * sin(phi), sin(theta) * sin(phi), cos(phi)};
+    return v_normalize(u);
+}
+
+static int ensure_dir(const char *dir) {
+    struct stat st;
+    if (stat(dir, &st) == 0) {
+        return S_ISDIR(st.st_mode) ? 1 : 0;
+    }
+    if (mkdir(dir, 0755) == 0) return 1;
+    return (errno == EEXIST);
+}
+
+static int read_coords_txt(const char *path, Vec3 **coords_out, int *n_coords_out) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) return 0;
+
+    int cap = 1024;
+    int n = 0;
+    Vec3 *coords = (Vec3 *)malloc((size_t)cap * sizeof(Vec3));
+    if (!coords) {
+        fclose(fp);
+        return 0;
+    }
+
+    char line[512];
+    while (fgets(line, (int)sizeof(line), fp)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '\0' || *p == '\n' || *p == '#') continue;
+
+        double x, y, z;
+        char lbl[64];
+        int m = sscanf(p, "%lf %lf %lf", &x, &y, &z);
+        if (m != 3) {
+            m = sscanf(p, "%63s %lf %lf %lf", lbl, &x, &y, &z);
+        }
+        if (m != 3 && m != 4) continue;
+
+        if (n >= MAX_COORDS) {
+            free(coords);
+            fclose(fp);
+            return 0;
+        }
+
+        if (n == cap) {
+            int new_cap = cap * 2;
+            Vec3 *tmp = (Vec3 *)realloc(coords, (size_t)new_cap * sizeof(Vec3));
+            if (!tmp) {
+                free(coords);
+                fclose(fp);
+                return 0;
+            }
+            coords = tmp;
+            cap = new_cap;
+        }
+
+        coords[n].x = x;
+        coords[n].y = y;
+        coords[n].z = z;
+        n++;
+    }
+
+    fclose(fp);
+    if (n < 1) {
+        free(coords);
+        return 0;
+    }
+
+    *coords_out = coords;
+    *n_coords_out = n;
+    return 1;
+}
+
+/* ============================================================================
+ * SINGLE MOLECULE MODE: Optional COM translation to coordinates file
+ * ============================================================================ */
+static int mode_lone(const char *in_path, const char *out_dir, const char *prefix,
+                     int n_points, int axis_i, int axis_j, double psi_deg,
+                     const char *coords_path) {
+    Atom base_atoms[MAX_ATOMS];
+    int n_atoms = 0;
+    char in_title[256];
+    
+    if (!read_xyz(in_path, base_atoms, &n_atoms, in_title, sizeof(in_title))) {
+        fprintf(stderr, "Error: failed reading XYZ: %s\n", in_path);
+        return 1;
+    }
+
+    if (axis_i < 1 || axis_i > n_atoms || axis_j < 1 || axis_j > n_atoms || axis_i == axis_j) {
+        fprintf(stderr, "Error: axis indices must be in [1..%d] and different.\n", n_atoms);
+        return 1;
+    }
+
+    Vec3 com = {0.0, 0.0, 0.0};
+    double msum = 0.0;
+    for (int i = 0; i < n_atoms; i++) {
+        double m = element_mass(base_atoms[i].el);
+        com.x += m * base_atoms[i].x;
+        com.y += m * base_atoms[i].y;
+        com.z += m * base_atoms[i].z;
+        msum += m;
+    }
+    if (msum <= 0.0) {
+        fprintf(stderr, "Error: invalid mass sum.\n");
+        return 1;
+    }
+    com = v_scale(com, 1.0 / msum);
+
+    Vec3 *com_frame = (Vec3 *)malloc((size_t)n_atoms * sizeof(Vec3));
+    Vec3 *work = (Vec3 *)malloc((size_t)n_atoms * sizeof(Vec3));
+    Atom *out_atoms = (Atom *)malloc((size_t)n_atoms * sizeof(Atom));
+    if (!com_frame || !work || !out_atoms) {
+        fprintf(stderr, "Error: memory allocation failed.\n");
+        free(com_frame);
+        free(work);
+        free(out_atoms);
+        return 1;
+    }
+
+    for (int i = 0; i < n_atoms; i++) {
+        Vec3 r = {base_atoms[i].x, base_atoms[i].y, base_atoms[i].z};
+        com_frame[i] = v_sub(r, com);
+        strcpy(out_atoms[i].el, base_atoms[i].el);
+    }
+
+    Vec3 from_axis = v_sub(com_frame[axis_j - 1], com_frame[axis_i - 1]);
+    if (v_norm(from_axis) < 1e-12) {
+        fprintf(stderr, "Error: selected axis is near zero length.\n");
+        free(com_frame);
+        free(work);
+        free(out_atoms);
+        return 1;
+    }
+    from_axis = v_normalize(from_axis);
+
+    double psi = psi_deg * (M_PI / 180.0);
+
+    Vec3 *centers = NULL;
+    int n_centers = 0;
+    int has_coords = 0;
+    if (coords_path) {
+        if (!read_coords_txt(coords_path, &centers, &n_centers)) {
+            fprintf(stderr, "Error: failed reading coordinate file: %s\n", coords_path);
+            free(com_frame);
+            free(work);
+            free(out_atoms);
+            return 1;
+        }
+        has_coords = 1;
+    } else {
+        centers = (Vec3 *)malloc(sizeof(Vec3));
+        if (!centers) {
+            fprintf(stderr, "Error: memory allocation failed.\n");
+            free(com_frame);
+            free(work);
+            free(out_atoms);
+            return 1;
+        }
+        centers[0] = com;
+        n_centers = 1;
+    }
+
+    char traj_path[MAX_PATH];
+    snprintf(traj_path, sizeof(traj_path), "%s/%s.xyz", out_dir, prefix);
+    
+    FILE *traj_fp = fopen(traj_path, "w");
+    if (!traj_fp) {
+        fprintf(stderr, "Error: cannot open trajectory file: %s\n", traj_path);
+        free(com_frame);
+        free(work);
+        free(out_atoms);
+        return 1;
+    }
+
+    int written = 0;
+    for (int cidx = 0; cidx < n_centers; cidx++) {
+        Vec3 center = centers[cidx];
+        for (int k = 0; k < n_points; k++) {
+            Vec3 target = fibonacci_direction(k, n_points);
+
+            for (int i = 0; i < n_atoms; i++) {
+                work[i] = align_vector_to_target(com_frame[i], from_axis, target);
+                if (fabs(psi_deg) > 0.0) {
+                    work[i] = rotate_about_axis(work[i], target, psi);
+                }
+
+                out_atoms[i].x = work[i].x + center.x;
+                out_atoms[i].y = work[i].y + center.y;
+                out_atoms[i].z = work[i].z + center.z;
+            }
+
+            write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
+            written++;
+        }
+    }
+
+    fclose(traj_fp);
+    if (has_coords) {
+        printf("Done. Wrote %d frames (%d centers x %d rotations) to: %s\n",
+               written, n_centers, n_points, traj_path);
+    } else {
+        printf("Done. Wrote %d frames at original molecule COM to: %s\n", written, traj_path);
+    }
+
+    free(com_frame);
+    free(work);
+    free(out_atoms);
+    free(centers);
+    return (written == (n_points * n_centers)) ? 0 : 2;
+}
+
+int main(int argc, char **argv) {
+    if (argc < 7 || argc > 9) {
+        fprintf(stderr,
+                "Usage:\n"
+                "  %s input.xyz out_dir out_prefix n_points axis_i axis_j [psi_deg] [coords.txt]\n\n"
+                "Description:\n"
+                "  - Rotates a single molecule around its own COM through Fibonacci directions.\n"
+                "  - If coords.txt is provided, molecule COM is translated to each listed coordinate.\n"
+                "  - Frame ordering: all rotations at center1, then all rotations at center2, etc.\n"
+                "  - Without coords.txt, rotations are written at the original molecule COM.\n"
+                "  - psi_deg: optional twist angle around each target direction (default 0).\n"
+                "  - Full periodic table supported.\n",
+                argv[0]);
+        return 1;
+    }
+
+    int n_points = atoi(argv[4]);
+    int axis_i = atoi(argv[5]);
+    int axis_j = atoi(argv[6]);
+    double psi_deg = 0.0;
+    const char *coords_path = NULL;
+
+    if (argc >= 8) {
+        char *endp = NULL;
+        double v = strtod(argv[7], &endp);
+        if (endp && *endp == '\0') {
+            psi_deg = v;
+            if (argc >= 9) coords_path = argv[8];
+        } else {
+            coords_path = argv[7];
+        }
+    }
+
+    if (n_points < 1 || n_points > MAX_FRAMES) {
+        fprintf(stderr, "Error: n_points must be between 1 and %d.\n", MAX_FRAMES);
+        return 1;
+    }
+    if (!ensure_dir(argv[2])) {
+        fprintf(stderr, "Error: cannot create/access output directory: %s\n", argv[2]);
+        return 1;
+    }
+
+    return mode_lone(argv[1], argv[2], argv[3], n_points, axis_i, axis_j, psi_deg, coords_path);
+}
