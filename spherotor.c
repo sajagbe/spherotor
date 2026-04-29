@@ -315,9 +315,33 @@ static int read_coords_txt(const char *path, Vec3 **coords_out, int *n_coords_ou
 /* ============================================================================
  * SINGLE MOLECULE MODE: Optional COM translation to coordinates file
  * ============================================================================ */
+static void decompose_frames(int n_frames, int *out_directions, int *out_rolls) {
+    int best_dir = 1, best_roll = n_frames;
+    double best_ratio = 1e10;
+    
+    int sq = (int)sqrt((double)n_frames) + 1;
+    for (int d = 1; d <= sq; d++) {
+        if (n_frames % d == 0) {
+            int r = n_frames / d;
+            double ratio = fabs(log((double)d / r));
+            if (ratio < best_ratio) {
+                best_ratio = ratio;
+                best_dir = d;
+                best_roll = r;
+            }
+        }
+    }
+    
+    *out_directions = best_dir;
+    *out_rolls = best_roll;
+}
+
 static int mode_lone(const char *in_path, const char *out_dir, const char *prefix,
-                     int n_points, int axis_i, int axis_j, double psi_deg,
-                     const char *coords_path) {
+                     int n_frames, int axis_i, int axis_j, const char *coords_path) {
+    
+    int n_directions, n_rolls;
+    decompose_frames(n_frames, &n_directions, &n_rolls);
+    
     Atom base_atoms[MAX_ATOMS];
     int n_atoms = 0;
     char in_title[256];
@@ -374,8 +398,6 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
     }
     from_axis = v_normalize(from_axis);
 
-    double psi = psi_deg * (M_PI / 180.0);
-
     Vec3 *centers = NULL;
     int n_centers = 0;
     int has_coords = 0;
@@ -410,81 +432,73 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         free(com_frame);
         free(work);
         free(out_atoms);
+        free(centers);
         return 1;
     }
 
     int written = 0;
     for (int cidx = 0; cidx < n_centers; cidx++) {
         Vec3 center = centers[cidx];
-        for (int k = 0; k < n_points; k++) {
-            Vec3 target = fibonacci_direction(k, n_points);
+        for (int k = 0; k < n_directions; k++) {
+            Vec3 target = fibonacci_direction(k, n_directions);
 
-            for (int i = 0; i < n_atoms; i++) {
-                work[i] = align_vector_to_target(com_frame[i], from_axis, target);
-                if (fabs(psi_deg) > 0.0) {
-                    work[i] = rotate_about_axis(work[i], target, psi);
+            for (int roll_idx = 0; roll_idx < n_rolls; roll_idx++) {
+                double roll_angle = (n_rolls > 1) ? 2.0 * M_PI * roll_idx / n_rolls : 0.0;
+
+                for (int i = 0; i < n_atoms; i++) {
+                    Vec3 aligned = align_vector_to_target(com_frame[i], from_axis, target);
+                    work[i] = rotate_about_axis(aligned, target, roll_angle);
+
+                    out_atoms[i].x = work[i].x + center.x;
+                    out_atoms[i].y = work[i].y + center.y;
+                    out_atoms[i].z = work[i].z + center.z;
                 }
 
-                out_atoms[i].x = work[i].x + center.x;
-                out_atoms[i].y = work[i].y + center.y;
-                out_atoms[i].z = work[i].z + center.z;
+                write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
+                written++;
             }
-
-            write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
-            written++;
         }
     }
 
     fclose(traj_fp);
     if (has_coords) {
-        printf("Done. Wrote %d frames (%d centers x %d rotations) to: %s\n",
-               written, n_centers, n_points, traj_path);
+        printf("Done. Wrote %d frames (%d centers x %d directions x %d rolls) to: %s\n",
+               written, n_centers, n_directions, n_rolls, traj_path);
     } else {
-        printf("Done. Wrote %d frames at original molecule COM to: %s\n", written, traj_path);
+        printf("Done. Wrote %d frames (%d directions x %d rolls) to: %s\n",
+               written, n_directions, n_rolls, traj_path);
     }
 
     free(com_frame);
     free(work);
     free(out_atoms);
     free(centers);
-    return (written == (n_points * n_centers)) ? 0 : 2;
+    return 0;
 }
 
 int main(int argc, char **argv) {
-    if (argc < 7 || argc > 9) {
+    if (argc < 7 || argc > 8) {
         fprintf(stderr,
                 "Usage:\n"
-                "  %s input.xyz out_dir out_prefix n_points axis_i axis_j [psi_deg] [coords.txt]\n\n"
+                "  %s input.xyz out_dir out_prefix n_frames axis_i axis_j [coords.txt]\n\n"
                 "Description:\n"
-                "  - Rotates a single molecule around its own COM through Fibonacci directions.\n"
-                "  - If coords.txt is provided, molecule COM is translated to each listed coordinate.\n"
-                "  - Frame ordering: all rotations at center1, then all rotations at center2, etc.\n"
-                "  - Without coords.txt, rotations are written at the original molecule COM.\n"
-                "  - psi_deg: optional twist angle around each target direction (default 0).\n"
+                "  - Rotates molecule to sample perfect spheres for ALL atoms.\n"
+                "  - Automatically decomposes n_frames into Fibonacci directions & rolls.\n"
+                "  - All atoms (on-axis or off-axis) trace complete spheres.\n"
+                "  - Example: n_frames=50 → 5 directions × 10 rolls.\n"
+                "  - If coords.txt provided, repeats at each coordinate.\n"
                 "  - Full periodic table supported.\n",
                 argv[0]);
         return 1;
     }
 
-    int n_points = atoi(argv[4]);
+    int n_frames = atoi(argv[4]);
     int axis_i = atoi(argv[5]);
     int axis_j = atoi(argv[6]);
-    double psi_deg = 0.0;
-    const char *coords_path = NULL;
+    const char *coords_path = (argc == 8) ? argv[7] : NULL;
 
-    if (argc >= 8) {
-        char *endp = NULL;
-        double v = strtod(argv[7], &endp);
-        if (endp && *endp == '\0') {
-            psi_deg = v;
-            if (argc >= 9) coords_path = argv[8];
-        } else {
-            coords_path = argv[7];
-        }
-    }
-
-    if (n_points < 1 || n_points > MAX_FRAMES) {
-        fprintf(stderr, "Error: n_points must be between 1 and %d.\n", MAX_FRAMES);
+    if (n_frames < 1 || n_frames > MAX_FRAMES) {
+        fprintf(stderr, "Error: n_frames must be between 1 and %d.\n", MAX_FRAMES);
         return 1;
     }
     if (!ensure_dir(argv[2])) {
@@ -492,5 +506,5 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    return mode_lone(argv[1], argv[2], argv[3], n_points, axis_i, axis_j, psi_deg, coords_path);
+    return mode_lone(argv[1], argv[2], argv[3], n_frames, axis_i, axis_j, coords_path);
 }
