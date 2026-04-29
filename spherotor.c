@@ -33,11 +33,8 @@ typedef struct {
  * Comprehensive periodic table atomic masses
  * ============================================================================ */
 static double element_mass(const char *el) {
-    /* Period 1 */
     if (strcmp(el, "H") == 0) return 1.00794;
     if (strcmp(el, "He") == 0) return 4.00260;
-
-    /* Period 2 */
     if (strcmp(el, "Li") == 0) return 6.94100;
     if (strcmp(el, "Be") == 0) return 9.01218;
     if (strcmp(el, "B") == 0) return 10.81100;
@@ -46,8 +43,6 @@ static double element_mass(const char *el) {
     if (strcmp(el, "O") == 0) return 15.99900;
     if (strcmp(el, "F") == 0) return 18.99840;
     if (strcmp(el, "Ne") == 0) return 20.17970;
-
-    /* Period 3 */
     if (strcmp(el, "Na") == 0) return 22.98977;
     if (strcmp(el, "Mg") == 0) return 24.30500;
     if (strcmp(el, "Al") == 0) return 26.98154;
@@ -56,8 +51,6 @@ static double element_mass(const char *el) {
     if (strcmp(el, "S") == 0) return 32.06500;
     if (strcmp(el, "Cl") == 0) return 35.45300;
     if (strcmp(el, "Ar") == 0) return 39.94800;
-
-    /* Period 4 */
     if (strcmp(el, "K") == 0) return 39.09830;
     if (strcmp(el, "Ca") == 0) return 40.07800;
     if (strcmp(el, "Sc") == 0) return 44.95591;
@@ -76,8 +69,6 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Se") == 0) return 78.96000;
     if (strcmp(el, "Br") == 0) return 79.90400;
     if (strcmp(el, "Kr") == 0) return 83.79800;
-
-    /* Period 5 */
     if (strcmp(el, "Rb") == 0) return 85.46780;
     if (strcmp(el, "Sr") == 0) return 87.62000;
     if (strcmp(el, "Y") == 0) return 88.90585;
@@ -96,8 +87,6 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Te") == 0) return 127.60000;
     if (strcmp(el, "I") == 0) return 126.90447;
     if (strcmp(el, "Xe") == 0) return 131.29300;
-
-    /* Period 6 */
     if (strcmp(el, "Cs") == 0) return 132.90545;
     if (strcmp(el, "Ba") == 0) return 137.32700;
     if (strcmp(el, "La") == 0) return 138.90547;
@@ -130,8 +119,6 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Po") == 0) return 209.00000;
     if (strcmp(el, "At") == 0) return 210.00000;
     if (strcmp(el, "Rn") == 0) return 222.00000;
-
-    /* Period 7 */
     if (strcmp(el, "Fr") == 0) return 223.00000;
     if (strcmp(el, "Ra") == 0) return 226.00000;
     if (strcmp(el, "Ac") == 0) return 227.00000;
@@ -146,50 +133,20 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Cf") == 0) return 251.00000;
     if (strcmp(el, "Es") == 0) return 252.00000;
     if (strcmp(el, "Fm") == 0) return 257.00000;
-
-    /* Default fallback */
     return 12.0;
 }
 
 /* ============================================================================
- * Vec3 utilities (kept for COM, I/O, Fibonacci sphere, and quat construction)
+ * Vec3 utilities
  * ============================================================================ */
 static Vec3 v_sub(Vec3 a, Vec3 b) { Vec3 c = {a.x - b.x, a.y - b.y, a.z - b.z}; return c; }
 static Vec3 v_scale(Vec3 a, double s) { Vec3 c = {a.x * s, a.y * s, a.z * s}; return c; }
-static double v_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-
-static Vec3 v_cross(Vec3 a, Vec3 b) {
-    Vec3 c = {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
-    return c;
-}
-
-static double v_norm(Vec3 a) { return sqrt(v_dot(a, a)); }
-
-static Vec3 v_normalize(Vec3 a) {
-    double n = v_norm(a);
-    if (n < 1e-15) {
-        Vec3 z = {0.0, 0.0, 0.0};
-        return z;
-    }
-    return v_scale(a, 1.0 / n);
-}
 
 /* ============================================================================
  * Quaternion operations
  * ============================================================================ */
 
-/* Multiply two quaternions: result = a * b */
-static Quat qmul(Quat a, Quat b) {
-    Quat c;
-    c.w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
-    c.x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
-    c.y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
-    c.z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w;
-    return c;
-}
-
-/* Rotate vector v by unit quaternion q: q v q*
- * Uses the optimized form (15 mul + 15 add, no intermediate quaternion construction). */
+/* Rotate vector v by unit quaternion q (optimized qvq* form) */
 static Vec3 qrot(Quat q, Vec3 v) {
     double tx = 2.0 * (q.y * v.z - q.z * v.y);
     double ty = 2.0 * (q.z * v.x - q.x * v.z);
@@ -201,38 +158,50 @@ static Vec3 qrot(Quat q, Vec3 v) {
     return r;
 }
 
-/* Quaternion from axis (must be unit length) and angle in radians. */
-static Quat quat_from_axis_angle(Vec3 axis, double angle) {
-    double half = angle * 0.5;
-    double s = sin(half);
-    Quat q = {cos(half), axis.x * s, axis.y * s, axis.z * s};
-    return q;
-}
+/* ============================================================================
+ * Uniform SO(3) sampling via R3 quasi-random sequence + Shoemake parameterization
+ *
+ * Shoemake (1992) showed that uniform rotations can be parameterized by three
+ * independent uniform variates (s, sigma, tau) in [0,1) x [0,2pi) x [0,2pi):
+ *
+ *   q = ( sqrt(1-s)*sin(sigma), sqrt(1-s)*cos(sigma),
+ *         sqrt(s)*sin(tau),     sqrt(s)*cos(tau)     )
+ *
+ * For low-discrepancy (quasi-random) coverage, we replace (s, sigma, tau) with
+ * the R3 sequence -- the 3D generalization of the golden-ratio sequence.
+ *
+ * The R3 base constant is the real root of x^4 = x + 1:
+ *   phi3 ~ 1.2207440846057596
+ *   alpha1 = 1/phi3,  alpha2 = 1/phi3^2,  alpha3 = 1/phi3^3
+ *
+ * For sample i:
+ *   s_i     = frac(0.5 + i * alpha1)
+ *   sigma_i = 2*pi * frac(0.5 + i * alpha2)
+ *   tau_i   = 2*pi * frac(0.5 + i * alpha3)
+ *
+ * This gives excellent uniformity on SO(3) for any N, with no need to
+ * decompose N into factors, and every atom's sphere gets equal coverage.
+ * ============================================================================ */
 
-/* Quaternion that rotates unit vector u onto unit vector v.
- * Handles the parallel and anti-parallel cases without branching on acos. */
-static Quat quat_from_two_vectors(Vec3 u, Vec3 v) {
-    double d = v_dot(u, v);
-    Vec3 cr = v_cross(u, v);
+/* R3 quasi-random constants (real root of x^4 - x - 1 = 0) */
+#define R3_PHI  1.2207440846057596
+#define R3_A1   (1.0 / R3_PHI)                    /* ~0.8191725134 */
+#define R3_A2   (1.0 / (R3_PHI * R3_PHI))         /* ~0.6710436067 */
+#define R3_A3   (1.0 / (R3_PHI * R3_PHI * R3_PHI)) /* ~0.5497004779 */
 
-    /* General case: q = (1+d, cross) then normalize.
-     * This avoids the trig roundtrip of acos(dot) → sin/cos. */
-    Quat q = {1.0 + d, cr.x, cr.y, cr.z};
-    double n = sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+static Quat uniform_so3_sample(int i) {
+    double s     = fmod(0.5 + (double)i * R3_A1, 1.0);
+    double sigma = 2.0 * M_PI * fmod(0.5 + (double)i * R3_A2, 1.0);
+    double tau   = 2.0 * M_PI * fmod(0.5 + (double)i * R3_A3, 1.0);
 
-    if (n < 1e-15) {
-        /* Anti-parallel (d ≈ -1): 180° about any vector perpendicular to u. */
-        Vec3 perp = (fabs(u.x) < 0.9) ? (Vec3){1.0, 0.0, 0.0} : (Vec3){0.0, 1.0, 0.0};
-        perp = v_normalize(v_cross(u, perp));
-        Quat r = {0.0, perp.x, perp.y, perp.z};
-        return r;
-    }
+    double r1 = sqrt(1.0 - s);
+    double r2 = sqrt(s);
 
-    double inv_n = 1.0 / n;
-    q.w *= inv_n;
-    q.x *= inv_n;
-    q.y *= inv_n;
-    q.z *= inv_n;
+    Quat q;
+    q.w = r1 * sin(sigma);
+    q.x = r1 * cos(sigma);
+    q.y = r2 * sin(tau);
+    q.z = r2 * cos(tau);
     return q;
 }
 
@@ -275,17 +244,6 @@ static void write_xyz_frame_single(FILE *fp, const Atom *atoms, int n_atoms, int
     for (int i = 0; i < n_atoms; i++) {
         fprintf(fp, "%-2s % .9f % .9f % .9f\n", atoms[i].el, atoms[i].x, atoms[i].y, atoms[i].z);
     }
-}
-
-/* ============================================================================
- * Fibonacci sphere sampling
- * ============================================================================ */
-static Vec3 fibonacci_direction(int i, int n) {
-    double idx = (double)i + 0.5;
-    double phi = acos(1.0 - 2.0 * idx / (double)n);
-    double theta = M_PI * (1.0 + sqrt(5.0)) * idx;
-    Vec3 u = {cos(theta) * sin(phi), sin(theta) * sin(phi), cos(phi)};
-    return v_normalize(u);
 }
 
 /* ============================================================================
@@ -362,37 +320,10 @@ static int read_coords_txt(const char *path, Vec3 **coords_out, int *n_coords_ou
 }
 
 /* ============================================================================
- * Frame decomposition
+ * Core rotation loop -- uniform SO(3) via R3 quasi-random quaternions
  * ============================================================================ */
-static void decompose_frames(int n_frames, int *out_directions, int *out_rolls) {
-    int best_dir = 1, best_roll = n_frames;
-    double best_ratio = 1e10;
-
-    int sq = (int)sqrt((double)n_frames) + 1;
-    for (int d = 1; d <= sq; d++) {
-        if (n_frames % d == 0) {
-            int r = n_frames / d;
-            double ratio = fabs(log((double)d / r));
-            if (ratio < best_ratio) {
-                best_ratio = ratio;
-                best_dir = d;
-                best_roll = r;
-            }
-        }
-    }
-
-    *out_directions = best_dir;
-    *out_rolls = best_roll;
-}
-
-/* ============================================================================
- * Core rotation loop — quaternion version
- * ============================================================================ */
-static int mode_lone(const char *in_path, const char *out_dir, const char *prefix,
-                     int n_frames, int axis_i, int axis_j, const char *coords_path) {
-
-    int n_directions, n_rolls;
-    decompose_frames(n_frames, &n_directions, &n_rolls);
+static int run(const char *in_path, const char *out_dir, const char *prefix,
+               int n_frames, const char *coords_path) {
 
     Atom base_atoms[MAX_ATOMS];
     int n_atoms = 0;
@@ -400,11 +331,6 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
 
     if (!read_xyz(in_path, base_atoms, &n_atoms, in_title, sizeof(in_title))) {
         fprintf(stderr, "Error: failed reading XYZ: %s\n", in_path);
-        return 1;
-    }
-
-    if (axis_i < 1 || axis_i > n_atoms || axis_j < 1 || axis_j > n_atoms || axis_i == axis_j) {
-        fprintf(stderr, "Error: axis indices must be in [1..%d] and different.\n", n_atoms);
         return 1;
     }
 
@@ -434,22 +360,12 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         return 1;
     }
 
-    /* Shift atoms to COM frame and copy element labels */
+    /* Shift atoms to COM frame */
     for (int i = 0; i < n_atoms; i++) {
         Vec3 r = {base_atoms[i].x, base_atoms[i].y, base_atoms[i].z};
         com_frame[i] = v_sub(r, com);
         strcpy(out_atoms[i].el, base_atoms[i].el);
     }
-
-    /* Molecular axis: unit vector from atom axis_i to atom axis_j (in COM frame) */
-    Vec3 from_axis = v_sub(com_frame[axis_j - 1], com_frame[axis_i - 1]);
-    if (v_norm(from_axis) < 1e-12) {
-        fprintf(stderr, "Error: selected axis is near zero length.\n");
-        free(com_frame);
-        free(out_atoms);
-        return 1;
-    }
-    from_axis = v_normalize(from_axis);
 
     /* Load translation centers (optional) */
     Vec3 *centers = NULL;
@@ -488,57 +404,37 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         return 1;
     }
 
-    /* === Main rotation loop (quaternion version) ===
-     *
-     * For each (direction, roll) pair we precompute a single combined quaternion:
-     *   Q_combined = Q_roll * Q_align
-     * and apply it once per atom, rather than two sequential Rodrigues rotations.
-     *
-     * Q_align: rotates the molecular axis onto the Fibonacci target direction.
-     * Q_roll:  rotates about the target direction by the roll angle.
-     */
+    /* For each frame, generate a single quaternion from the R3 quasi-random
+     * sequence on SO(3). Apply it to all atoms. Every atom gets uniformly
+     * distributed sphere coverage with no axis dependence. */
     int written = 0;
+    int sample_idx = 0;
+
     for (int cidx = 0; cidx < n_centers; cidx++) {
         Vec3 center = centers[cidx];
 
-        for (int k = 0; k < n_directions; k++) {
-            Vec3 target = fibonacci_direction(k, n_directions);
+        for (int f = 0; f < n_frames; f++) {
+            Quat q = uniform_so3_sample(sample_idx++);
 
-            /* Alignment quaternion: from_axis → target (computed once per direction) */
-            Quat q_align = quat_from_two_vectors(from_axis, target);
-
-            for (int roll_idx = 0; roll_idx < n_rolls; roll_idx++) {
-                double roll_angle = (n_rolls > 1)
-                    ? 2.0 * M_PI * (double)roll_idx / (double)n_rolls
-                    : 0.0;
-
-                /* Roll quaternion about target axis (computed once per roll) */
-                Quat q_roll = quat_from_axis_angle(target, roll_angle);
-
-                /* Combined rotation: first align, then roll */
-                Quat q_combined = qmul(q_roll, q_align);
-
-                /* Apply single quaternion rotation to every atom */
-                for (int i = 0; i < n_atoms; i++) {
-                    Vec3 rotated = qrot(q_combined, com_frame[i]);
-                    out_atoms[i].x = rotated.x + center.x;
-                    out_atoms[i].y = rotated.y + center.y;
-                    out_atoms[i].z = rotated.z + center.z;
-                }
-
-                write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
-                written++;
+            for (int i = 0; i < n_atoms; i++) {
+                Vec3 rotated = qrot(q, com_frame[i]);
+                out_atoms[i].x = rotated.x + center.x;
+                out_atoms[i].y = rotated.y + center.y;
+                out_atoms[i].z = rotated.z + center.z;
             }
+
+            write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
+            written++;
         }
     }
 
     fclose(traj_fp);
     if (has_coords) {
-        printf("Done. Wrote %d frames (%d centers x %d directions x %d rolls) to: %s\n",
-               written, n_centers, n_directions, n_rolls, traj_path);
+        printf("Done. Wrote %d frames (%d centers x %d uniform SO(3) samples) to: %s\n",
+               written, n_centers, n_frames, traj_path);
     } else {
-        printf("Done. Wrote %d frames (%d directions x %d rolls) to: %s\n",
-               written, n_directions, n_rolls, traj_path);
+        printf("Done. Wrote %d frames (%d uniform SO(3) samples) to: %s\n",
+               written, n_frames, traj_path);
     }
 
     free(com_frame);
@@ -548,26 +444,24 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
 }
 
 int main(int argc, char **argv) {
-    if (argc < 7 || argc > 8) {
+    if (argc < 5 || argc > 6) {
         fprintf(stderr,
                 "Usage:\n"
-                "  %s input.xyz out_dir out_prefix n_frames axis_i axis_j [coords.txt]\n\n"
+                "  %s input.xyz out_dir out_prefix n_frames [coords.txt]\n\n"
                 "Description:\n"
-                "  - Rotates molecule to sample perfect spheres for ALL atoms.\n"
-                "  - Uses quaternion composition for efficient, numerically stable rotations.\n"
-                "  - Automatically decomposes n_frames into Fibonacci directions & rolls.\n"
-                "  - All atoms (on-axis or off-axis) trace complete spheres.\n"
-                "  - Example: n_frames=50 -> 5 directions x 10 rolls.\n"
-                "  - If coords.txt provided, repeats at each coordinate.\n"
-                "  - Full periodic table supported.\n",
+                "  Generates uniformly sampled molecular rotations via R3\n"
+                "  quasi-random quaternions (Shoemake parameterization of SO(3)).\n"
+                "  Every atom traces a uniformly covered sphere -- no axis\n"
+                "  selection needed, no product-grid artifacts.\n\n"
+                "  If coords.txt is provided, the rotated molecule is placed\n"
+                "  at each coordinate, yielding centers x n_frames total frames.\n\n"
+                "  Full periodic table supported (H through Fm).\n",
                 argv[0]);
         return 1;
     }
 
     int n_frames = atoi(argv[4]);
-    int axis_i = atoi(argv[5]);
-    int axis_j = atoi(argv[6]);
-    const char *coords_path = (argc == 8) ? argv[7] : NULL;
+    const char *coords_path = (argc == 6) ? argv[5] : NULL;
 
     if (n_frames < 1 || n_frames > MAX_FRAMES) {
         fprintf(stderr, "Error: n_frames must be between 1 and %d.\n", MAX_FRAMES);
@@ -578,5 +472,12 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    return mode_lone(argv[1], argv[2], argv[3], n_frames, axis_i, axis_j, coords_path);
+    return run(argv[1], argv[2], argv[3], n_frames, coords_path);
 }
+
+
+
+// ./spherotor input.xyz out_dir out_prefix n_frames [coords.txt]
+// Example:
+//   ./spherotor molecule.xyz output mol 1000
+//   ./spherotor molecule.xyz output mol 1000 coords.txt
