@@ -25,12 +25,18 @@ typedef struct {
     double x, y, z;
 } Vec3;
 
-/* Comprehensive periodic table atomic masses */
+typedef struct {
+    double w, x, y, z;
+} Quat;
+
+/* ============================================================================
+ * Comprehensive periodic table atomic masses
+ * ============================================================================ */
 static double element_mass(const char *el) {
     /* Period 1 */
     if (strcmp(el, "H") == 0) return 1.00794;
     if (strcmp(el, "He") == 0) return 4.00260;
-    
+
     /* Period 2 */
     if (strcmp(el, "Li") == 0) return 6.94100;
     if (strcmp(el, "Be") == 0) return 9.01218;
@@ -40,7 +46,7 @@ static double element_mass(const char *el) {
     if (strcmp(el, "O") == 0) return 15.99900;
     if (strcmp(el, "F") == 0) return 18.99840;
     if (strcmp(el, "Ne") == 0) return 20.17970;
-    
+
     /* Period 3 */
     if (strcmp(el, "Na") == 0) return 22.98977;
     if (strcmp(el, "Mg") == 0) return 24.30500;
@@ -50,7 +56,7 @@ static double element_mass(const char *el) {
     if (strcmp(el, "S") == 0) return 32.06500;
     if (strcmp(el, "Cl") == 0) return 35.45300;
     if (strcmp(el, "Ar") == 0) return 39.94800;
-    
+
     /* Period 4 */
     if (strcmp(el, "K") == 0) return 39.09830;
     if (strcmp(el, "Ca") == 0) return 40.07800;
@@ -70,7 +76,7 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Se") == 0) return 78.96000;
     if (strcmp(el, "Br") == 0) return 79.90400;
     if (strcmp(el, "Kr") == 0) return 83.79800;
-    
+
     /* Period 5 */
     if (strcmp(el, "Rb") == 0) return 85.46780;
     if (strcmp(el, "Sr") == 0) return 87.62000;
@@ -90,7 +96,7 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Te") == 0) return 127.60000;
     if (strcmp(el, "I") == 0) return 126.90447;
     if (strcmp(el, "Xe") == 0) return 131.29300;
-    
+
     /* Period 6 */
     if (strcmp(el, "Cs") == 0) return 132.90545;
     if (strcmp(el, "Ba") == 0) return 137.32700;
@@ -124,7 +130,7 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Po") == 0) return 209.00000;
     if (strcmp(el, "At") == 0) return 210.00000;
     if (strcmp(el, "Rn") == 0) return 222.00000;
-    
+
     /* Period 7 */
     if (strcmp(el, "Fr") == 0) return 223.00000;
     if (strcmp(el, "Ra") == 0) return 226.00000;
@@ -140,19 +146,23 @@ static double element_mass(const char *el) {
     if (strcmp(el, "Cf") == 0) return 251.00000;
     if (strcmp(el, "Es") == 0) return 252.00000;
     if (strcmp(el, "Fm") == 0) return 257.00000;
-    
+
     /* Default fallback */
     return 12.0;
 }
 
-static Vec3 v_add(Vec3 a, Vec3 b) { Vec3 c = {a.x + b.x, a.y + b.y, a.z + b.z}; return c; }
+/* ============================================================================
+ * Vec3 utilities (kept for COM, I/O, Fibonacci sphere, and quat construction)
+ * ============================================================================ */
 static Vec3 v_sub(Vec3 a, Vec3 b) { Vec3 c = {a.x - b.x, a.y - b.y, a.z - b.z}; return c; }
 static Vec3 v_scale(Vec3 a, double s) { Vec3 c = {a.x * s, a.y * s, a.z * s}; return c; }
 static double v_dot(Vec3 a, Vec3 b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
 static Vec3 v_cross(Vec3 a, Vec3 b) {
     Vec3 c = {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
     return c;
 }
+
 static double v_norm(Vec3 a) { return sqrt(v_dot(a, a)); }
 
 static Vec3 v_normalize(Vec3 a) {
@@ -164,38 +174,71 @@ static Vec3 v_normalize(Vec3 a) {
     return v_scale(a, 1.0 / n);
 }
 
-static Vec3 rotate_about_axis(Vec3 v, Vec3 axis_unit, double angle_rad) {
-    double c = cos(angle_rad);
-    double s = sin(angle_rad);
-    Vec3 term1 = v_scale(v, c);
-    Vec3 term2 = v_scale(v_cross(axis_unit, v), s);
-    Vec3 term3 = v_scale(axis_unit, v_dot(axis_unit, v) * (1.0 - c));
-    return v_add(v_add(term1, term2), term3);
+/* ============================================================================
+ * Quaternion operations
+ * ============================================================================ */
+
+/* Multiply two quaternions: result = a * b */
+static Quat qmul(Quat a, Quat b) {
+    Quat c;
+    c.w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z;
+    c.x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y;
+    c.y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x;
+    c.z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w;
+    return c;
 }
 
-static Vec3 align_vector_to_target(Vec3 v, Vec3 from_unit, Vec3 to_unit) {
-    double c = v_dot(from_unit, to_unit);
-    if (c > 1.0) c = 1.0;
-    if (c < -1.0) c = -1.0;
+/* Rotate vector v by unit quaternion q: q v q*
+ * Uses the optimized form (15 mul + 15 add, no intermediate quaternion construction). */
+static Vec3 qrot(Quat q, Vec3 v) {
+    double tx = 2.0 * (q.y * v.z - q.z * v.y);
+    double ty = 2.0 * (q.z * v.x - q.x * v.z);
+    double tz = 2.0 * (q.x * v.y - q.y * v.x);
+    Vec3 r;
+    r.x = v.x + q.w * tx + (q.y * tz - q.z * ty);
+    r.y = v.y + q.w * ty + (q.z * tx - q.x * tz);
+    r.z = v.z + q.w * tz + (q.x * ty - q.y * tx);
+    return r;
+}
 
-    if (c > 1.0 - 1e-14) return v;
+/* Quaternion from axis (must be unit length) and angle in radians. */
+static Quat quat_from_axis_angle(Vec3 axis, double angle) {
+    double half = angle * 0.5;
+    double s = sin(half);
+    Quat q = {cos(half), axis.x * s, axis.y * s, axis.z * s};
+    return q;
+}
 
-    if (c < -1.0 + 1e-14) {
-        Vec3 trial = {1.0, 0.0, 0.0};
-        if (fabs(v_dot(from_unit, trial)) > 0.9) {
-            trial.x = 0.0;
-            trial.y = 1.0;
-            trial.z = 0.0;
-        }
-        Vec3 axis = v_normalize(v_cross(from_unit, trial));
-        return rotate_about_axis(v, axis, M_PI);
+/* Quaternion that rotates unit vector u onto unit vector v.
+ * Handles the parallel and anti-parallel cases without branching on acos. */
+static Quat quat_from_two_vectors(Vec3 u, Vec3 v) {
+    double d = v_dot(u, v);
+    Vec3 cr = v_cross(u, v);
+
+    /* General case: q = (1+d, cross) then normalize.
+     * This avoids the trig roundtrip of acos(dot) → sin/cos. */
+    Quat q = {1.0 + d, cr.x, cr.y, cr.z};
+    double n = sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z);
+
+    if (n < 1e-15) {
+        /* Anti-parallel (d ≈ -1): 180° about any vector perpendicular to u. */
+        Vec3 perp = (fabs(u.x) < 0.9) ? (Vec3){1.0, 0.0, 0.0} : (Vec3){0.0, 1.0, 0.0};
+        perp = v_normalize(v_cross(u, perp));
+        Quat r = {0.0, perp.x, perp.y, perp.z};
+        return r;
     }
 
-    Vec3 axis = v_normalize(v_cross(from_unit, to_unit));
-    double angle = acos(c);
-    return rotate_about_axis(v, axis, angle);
+    double inv_n = 1.0 / n;
+    q.w *= inv_n;
+    q.x *= inv_n;
+    q.y *= inv_n;
+    q.z *= inv_n;
+    return q;
 }
 
+/* ============================================================================
+ * XYZ I/O
+ * ============================================================================ */
 static int read_xyz(const char *path, Atom *atoms, int *n_atoms, char *title, size_t title_sz) {
     FILE *fp = fopen(path, "r");
     if (!fp) return 0;
@@ -234,6 +277,9 @@ static void write_xyz_frame_single(FILE *fp, const Atom *atoms, int n_atoms, int
     }
 }
 
+/* ============================================================================
+ * Fibonacci sphere sampling
+ * ============================================================================ */
 static Vec3 fibonacci_direction(int i, int n) {
     double idx = (double)i + 0.5;
     double phi = acos(1.0 - 2.0 * idx / (double)n);
@@ -242,6 +288,9 @@ static Vec3 fibonacci_direction(int i, int n) {
     return v_normalize(u);
 }
 
+/* ============================================================================
+ * Filesystem and coordinate helpers
+ * ============================================================================ */
 static int ensure_dir(const char *dir) {
     struct stat st;
     if (stat(dir, &st) == 0) {
@@ -313,12 +362,12 @@ static int read_coords_txt(const char *path, Vec3 **coords_out, int *n_coords_ou
 }
 
 /* ============================================================================
- * SINGLE MOLECULE MODE: Optional COM translation to coordinates file
+ * Frame decomposition
  * ============================================================================ */
 static void decompose_frames(int n_frames, int *out_directions, int *out_rolls) {
     int best_dir = 1, best_roll = n_frames;
     double best_ratio = 1e10;
-    
+
     int sq = (int)sqrt((double)n_frames) + 1;
     for (int d = 1; d <= sq; d++) {
         if (n_frames % d == 0) {
@@ -331,21 +380,24 @@ static void decompose_frames(int n_frames, int *out_directions, int *out_rolls) 
             }
         }
     }
-    
+
     *out_directions = best_dir;
     *out_rolls = best_roll;
 }
 
+/* ============================================================================
+ * Core rotation loop — quaternion version
+ * ============================================================================ */
 static int mode_lone(const char *in_path, const char *out_dir, const char *prefix,
                      int n_frames, int axis_i, int axis_j, const char *coords_path) {
-    
+
     int n_directions, n_rolls;
     decompose_frames(n_frames, &n_directions, &n_rolls);
-    
+
     Atom base_atoms[MAX_ATOMS];
     int n_atoms = 0;
     char in_title[256];
-    
+
     if (!read_xyz(in_path, base_atoms, &n_atoms, in_title, sizeof(in_title))) {
         fprintf(stderr, "Error: failed reading XYZ: %s\n", in_path);
         return 1;
@@ -356,6 +408,7 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         return 1;
     }
 
+    /* Compute center of mass */
     Vec3 com = {0.0, 0.0, 0.0};
     double msum = 0.0;
     for (int i = 0; i < n_atoms; i++) {
@@ -371,33 +424,34 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
     }
     com = v_scale(com, 1.0 / msum);
 
+    /* Allocate working arrays */
     Vec3 *com_frame = (Vec3 *)malloc((size_t)n_atoms * sizeof(Vec3));
-    Vec3 *work = (Vec3 *)malloc((size_t)n_atoms * sizeof(Vec3));
     Atom *out_atoms = (Atom *)malloc((size_t)n_atoms * sizeof(Atom));
-    if (!com_frame || !work || !out_atoms) {
+    if (!com_frame || !out_atoms) {
         fprintf(stderr, "Error: memory allocation failed.\n");
         free(com_frame);
-        free(work);
         free(out_atoms);
         return 1;
     }
 
+    /* Shift atoms to COM frame and copy element labels */
     for (int i = 0; i < n_atoms; i++) {
         Vec3 r = {base_atoms[i].x, base_atoms[i].y, base_atoms[i].z};
         com_frame[i] = v_sub(r, com);
         strcpy(out_atoms[i].el, base_atoms[i].el);
     }
 
+    /* Molecular axis: unit vector from atom axis_i to atom axis_j (in COM frame) */
     Vec3 from_axis = v_sub(com_frame[axis_j - 1], com_frame[axis_i - 1]);
     if (v_norm(from_axis) < 1e-12) {
         fprintf(stderr, "Error: selected axis is near zero length.\n");
         free(com_frame);
-        free(work);
         free(out_atoms);
         return 1;
     }
     from_axis = v_normalize(from_axis);
 
+    /* Load translation centers (optional) */
     Vec3 *centers = NULL;
     int n_centers = 0;
     int has_coords = 0;
@@ -405,7 +459,6 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         if (!read_coords_txt(coords_path, &centers, &n_centers)) {
             fprintf(stderr, "Error: failed reading coordinate file: %s\n", coords_path);
             free(com_frame);
-            free(work);
             free(out_atoms);
             return 1;
         }
@@ -415,7 +468,6 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         if (!centers) {
             fprintf(stderr, "Error: memory allocation failed.\n");
             free(com_frame);
-            free(work);
             free(out_atoms);
             return 1;
         }
@@ -423,35 +475,55 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
         n_centers = 1;
     }
 
+    /* Open trajectory output */
     char traj_path[MAX_PATH];
     snprintf(traj_path, sizeof(traj_path), "%s/%s.xyz", out_dir, prefix);
-    
+
     FILE *traj_fp = fopen(traj_path, "w");
     if (!traj_fp) {
         fprintf(stderr, "Error: cannot open trajectory file: %s\n", traj_path);
         free(com_frame);
-        free(work);
         free(out_atoms);
         free(centers);
         return 1;
     }
 
+    /* === Main rotation loop (quaternion version) ===
+     *
+     * For each (direction, roll) pair we precompute a single combined quaternion:
+     *   Q_combined = Q_roll * Q_align
+     * and apply it once per atom, rather than two sequential Rodrigues rotations.
+     *
+     * Q_align: rotates the molecular axis onto the Fibonacci target direction.
+     * Q_roll:  rotates about the target direction by the roll angle.
+     */
     int written = 0;
     for (int cidx = 0; cidx < n_centers; cidx++) {
         Vec3 center = centers[cidx];
+
         for (int k = 0; k < n_directions; k++) {
             Vec3 target = fibonacci_direction(k, n_directions);
 
+            /* Alignment quaternion: from_axis → target (computed once per direction) */
+            Quat q_align = quat_from_two_vectors(from_axis, target);
+
             for (int roll_idx = 0; roll_idx < n_rolls; roll_idx++) {
-                double roll_angle = (n_rolls > 1) ? 2.0 * M_PI * roll_idx / n_rolls : 0.0;
+                double roll_angle = (n_rolls > 1)
+                    ? 2.0 * M_PI * (double)roll_idx / (double)n_rolls
+                    : 0.0;
 
+                /* Roll quaternion about target axis (computed once per roll) */
+                Quat q_roll = quat_from_axis_angle(target, roll_angle);
+
+                /* Combined rotation: first align, then roll */
+                Quat q_combined = qmul(q_roll, q_align);
+
+                /* Apply single quaternion rotation to every atom */
                 for (int i = 0; i < n_atoms; i++) {
-                    Vec3 aligned = align_vector_to_target(com_frame[i], from_axis, target);
-                    work[i] = rotate_about_axis(aligned, target, roll_angle);
-
-                    out_atoms[i].x = work[i].x + center.x;
-                    out_atoms[i].y = work[i].y + center.y;
-                    out_atoms[i].z = work[i].z + center.z;
+                    Vec3 rotated = qrot(q_combined, com_frame[i]);
+                    out_atoms[i].x = rotated.x + center.x;
+                    out_atoms[i].y = rotated.y + center.y;
+                    out_atoms[i].z = rotated.z + center.z;
                 }
 
                 write_xyz_frame_single(traj_fp, out_atoms, n_atoms, written + 1);
@@ -470,7 +542,6 @@ static int mode_lone(const char *in_path, const char *out_dir, const char *prefi
     }
 
     free(com_frame);
-    free(work);
     free(out_atoms);
     free(centers);
     return 0;
@@ -483,9 +554,10 @@ int main(int argc, char **argv) {
                 "  %s input.xyz out_dir out_prefix n_frames axis_i axis_j [coords.txt]\n\n"
                 "Description:\n"
                 "  - Rotates molecule to sample perfect spheres for ALL atoms.\n"
+                "  - Uses quaternion composition for efficient, numerically stable rotations.\n"
                 "  - Automatically decomposes n_frames into Fibonacci directions & rolls.\n"
                 "  - All atoms (on-axis or off-axis) trace complete spheres.\n"
-                "  - Example: n_frames=50 → 5 directions × 10 rolls.\n"
+                "  - Example: n_frames=50 -> 5 directions x 10 rolls.\n"
                 "  - If coords.txt provided, repeats at each coordinate.\n"
                 "  - Full periodic table supported.\n",
                 argv[0]);
