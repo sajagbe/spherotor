@@ -1,22 +1,22 @@
 # spherotor
 
-A command-line tool that generates a **multi-frame XYZ trajectory** by rotating a single molecule through uniformly distributed orientations on a sphere.
+A command-line tool that generates a **multi-frame XYZ trajectory** by rotating a single molecule through uniformly distributed orientations on a sphere (full SO(3), not just a single axis).
 
 ## Basic Usage
 
 ```bash
-./spherotor input.xyz out_dir out_prefix n_points axis_i axis_j [psi_deg] [coords.txt]
+./spherotor input.xyz out_dir out_prefix n_frames [coords.txt]
 ```
 
 ---
 
 ## What It Does
 
-1. Reads a molecule from `input.xyz` and computes its **center of mass (COM)**
-2. Defines a **molecular axis** as the vector from atom `axis_i` → `axis_j`
-3. Generates `n_points` roughly-uniform directions on the sphere (Fibonacci method)
-4. For each direction, rotates the molecule so the molecular axis aligns to it
-5. Writes all frames to `out_dir/out_prefix.xyz`
+1. Reads a molecule from `input.xyz` and computes its **center of mass (COM)**.
+2. Shifts the molecule into the COM frame.
+3. Generates `n_frames` uniformly-distributed rotations of the *whole molecule* using a low-discrepancy R3 quasi-random sequence fed through Shoemake's quaternion parameterization of SO(3) — this covers all possible orientations evenly, with no molecular axis needed and no product-grid artifacts.
+4. For each rotation, places the rotated molecule at a center (either the original COM, or each coordinate in `coords.txt` if provided).
+5. Writes all frames to `out_dir/out_prefix.xyz`.
 
 ---
 
@@ -24,19 +24,10 @@ A command-line tool that generates a **multi-frame XYZ trajectory** by rotating 
 
 | Mode | Command | Frames | Behavior |
 | --- | --- | --- | --- |
-| **Spherical rotation only** | No optional args | `n_points` | Molecule stays at original COM, rotated through all directions |
-| **With translation file** | `coords.txt` provided | `n_centers × n_points` | Full rotation set repeated at each coordinate center |
-| **With twist** | `psi_deg` provided | same as above | Adds a rotation about the target axis after alignment |
+| **Spherical rotation only** | No `coords.txt` | `n_frames` | Molecule stays at its original COM, rotated through `n_frames` orientations |
+| **With translation file** | `coords.txt` provided | `n_centers × n_frames` | Full rotation set repeated at each coordinate center |
 
-> Frame ordering when using a coords file: all `n_points` rotations at center 1, then center 2, etc.
-> 
-
----
-
-## Optional Argument Parsing
-
-- **1 optional arg after `axis_j`** → number = `psi_deg`; non-number = `coords.txt`
-- **2 optional args** → first is `psi_deg`, second is `coords.txt`
+> Frame ordering when using a coords file: all `n_frames` rotations at center 1, then center 2, etc.
 
 ## To Compile:
 
@@ -46,15 +37,15 @@ cc -O3 -std=c11 -Wall -Wextra -pedantic -o spherotor spherotor.c -lm
 
 e.g
 
-To translate to origin alone (no COM rotation, no psi rotation)
+To translate to origin alone (no rotation sampling, single frame per center)
 
 ```bash
-./spherotor LF.xyz . LF-spherotor 1 1 2 coord.txt
+./spherotor LF.xyz . LF-spherotor 1 coord.txt
 ```
 
 Here `coord.txt` contains just `0.000 0.000 0.000` .
 
-Next I copy this to make one where the atoms are placed by placeholder X. In vsg, atoms named X  are treated with vdw radius of 1Å.
+Next I copy this to make one where the atoms are placed by placeholder X. In vsg, atoms named X are treated with vdw radius of 1Å.
 
 Then:
 
@@ -63,18 +54,18 @@ vsg -s 7 -d 0.04 LF-X.xyz -t
 vsg -s 9 -d 0.04 LF-X.xyz -t 
 ```
 
-0.04 density because we want to use 1 COM coordinate per 25 $Å^2$, we chose this because we wanted to minimize crossover of sampled area for each copy.  7 and 9 Å away because we wanna minimize vdW interaction with LF. 
+0.04 density because we want to use 1 COM coordinate per 25 $Å^2$ (1/0.04 = 25), we chose this because we wanted to minimize crossover of sampled area for each copy. 7 and 9 Å away because we wanna minimize vdW interaction with LF.
 
 ```bash
-./spherotor p-cresol.xyz . p-cresol-7 50 1 2 LF-X7.txt
-Done. Wrote 2200 frames (44 centers x 50 rotations) to: ./p-cresol-7.xyz
+./spherotor p-cresol.xyz 7 cresol7 50 LF-Prep/LF-X7.txt
+Done. Wrote 2150 frames (43 centers x 50 uniform SO(3) samples) to: 7/cresol7.xyz
 
-./spherotor p-cresol.xyz . p-cresol-9 50 1 2 LF-X9.txt
-Done. Wrote 3300 frames (66 centers x 50 rotations) to: ./p-cresol-9.xyz
+./spherotor p-cresol.xyz 9 cresol9 50 LF-Prep/LF-X9.txt
+Done. Wrote 3250 frames (65 centers x 50 uniform SO(3) samples) to: 9/cresol9.xyz
 
- ./spherotor Indole.xyz . Indole-9 50 1 2 LF-X9.txt
-Done. Wrote 3300 frames (66 centers x 50 rotations) to: ./Indole-9.xyz
+./spherotor Indole.xyz 9 indole9 50 LF-Prep/LF-X9.txt
+Done. Wrote 3250 frames (65 centers x 50 uniform SO(3) samples) to: 9/indole9.xyz
 
-./spherotor Indole.xyz . Indole-7 50 1 2 LF-X7.txt
-Done. Wrote 2200 frames (44 centers x 50 rotations) to: ./Indole-7.xyz
+./spherotor Indole.xyz 7 indole7 50 LF-Prep/LF-X7.txt
+Done. Wrote 2150 frames (43 centers x 50 uniform SO(3) samples) to: 7/indole7.xyz
 ```
